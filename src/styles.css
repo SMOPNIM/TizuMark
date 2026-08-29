@@ -2533,6 +2533,35 @@ body.is-resizing .side-btn {
 [data-theme="dark"] .alert-warning { background: linear-gradient(135deg, rgba(var(--alert-warning-rgb), 0.12) 0%, rgba(var(--alert-warning-rgb), 0.06) 100%); box-shadow: inset 0 0 0 1px rgba(var(--alert-warning-rgb), 0.15); }
 [data-theme="dark"] .alert-caution { background: linear-gradient(135deg, rgba(var(--alert-caution-rgb), 0.12) 0%, rgba(var(--alert-caution-rgb), 0.06) 100%); box-shadow: inset 0 0 0 1px rgba(var(--alert-caution-rgb), 0.15); }
 
+/* Front Matter Dialog Fields */
+.frontmatter-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.frontmatter-field-row .fm-field-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+.frontmatter-field-row .fm-field-input {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+}
+.frontmatter-field-row .fm-field-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb, 56,132,255), 0.15);
+}
+
 /* KaTeX Math Styles */
 
 /* Wrapper for display math blocks rendered by katex.render() into <p> elements */

@@ -1534,6 +1534,14 @@ function renderMarkdown(content, options) {
   // 0. 统一换行符为 LF，避免 CRLF 的 \r 污染后续行数统计
   content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
+  // 0.1. 隐藏 Front Matter（若设置开启）
+  if (opts.hideFrontMatter && content.startsWith('---')) {
+    const endIdx = content.indexOf('\n---', 3);
+    if (endIdx !== -1) {
+      content = content.substring(endIdx + 4).replace(/^\n/, '');
+    }
+  }
+
   // 0. Convert GitHub-style math fences (```math/```latex/```tex) → $$...$$ blocks
   content = convertMathFences(content);
 

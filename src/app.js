@@ -97,6 +97,7 @@ class Tab {
     this.pendingExternalChange = false;
     this._loaded = true;
     this.previewScrollTop = 0;
+    this.createdAt = new Date();
   }
 
   get isModified() {
@@ -273,6 +274,21 @@ const I18N = {
     extendedSyntaxHint: '开启后，==文字== 会渲染为黄色高亮（TizuMark 扩展语法）。关闭则 ==文字== 原样显示为普通文本，适合粘贴 AI 生成、未遵循该语法的 Markdown，避免被误当成高亮。',
     showTrayIcon: '显示托盘图标',
     showTrayIconHint: '关闭后隐藏系统托盘图标；此时关闭窗口会直接退出应用（否则无法通过托盘恢复窗口）。',
+    autoFrontMatter: '保存时自动添加 Front Matter',
+    hideFrontMatter: '预览时隐藏 Front Matter',
+    frontmatterTitle: '标题',
+    frontmatterDescription: '描述',
+    frontmatterDate: '创建日期',
+    frontmatterPublished: '发布日期',
+    frontmatterPubDate: '发布日期',
+    frontmatterDraft: '草稿',
+    frontmatterTags: '标签',
+    frontmatterCategory: '分类',
+    frontmatterPinned: '置顶',
+    frontmatterAuthor: '作者',
+    frontmatterImage: '封面图',
+    frontmatterDialogTitle: '插入 Front Matter',
+    frontmatterInsert: '插入',
     tabSizeHint: '每按一次 Tab 键缩进几个空格。列表要往里缩一级（做子列表）也靠这个宽度，建议用 4，最稳。',
     closeAction: '关闭窗口时',
     closeActionAsk: '每次询问',
@@ -732,6 +748,21 @@ const I18N = {
     extendedSyntaxHint: 'When enabled, ==text== renders as a yellow highlight (TizuMark extended syntax). When disabled, ==text== shows as plain text, which is useful for AI-generated Markdown that does not follow this syntax and would otherwise be misinterpreted as a highlight.',
     showTrayIcon: 'Show tray icon',
     showTrayIconHint: 'When disabled, the system tray icon is hidden; closing the window then quits the app directly (otherwise the window could not be restored via the tray).',
+    autoFrontMatter: 'Auto-add Front Matter on save',
+    hideFrontMatter: 'Hide Front Matter in preview',
+    frontmatterTitle: 'Title',
+    frontmatterDescription: 'Description',
+    frontmatterDate: 'Date',
+    frontmatterPublished: 'Published',
+    frontmatterPubDate: 'Published',
+    frontmatterDraft: 'Draft',
+    frontmatterTags: 'Tags',
+    frontmatterCategory: 'Category',
+    frontmatterPinned: 'Pinned',
+    frontmatterAuthor: 'Author',
+    frontmatterImage: 'Image',
+    frontmatterDialogTitle: 'Insert Front Matter',
+    frontmatterInsert: 'Insert',
     tabSizeHint: 'How many spaces a Tab press indents. Indenting a list one level (to make a sub-list) also uses this width; 4 is recommended for the safest nesting.',
     closeAction: 'On window close',
     closeActionAsk: 'Ask every time',
@@ -1771,6 +1802,21 @@ class MarkdownEditor {
       // 预览区分屏宽度（合并自 PR #36）：拖拽 resizer 后持久化，下次启动按此还原。
       previewPaneWidth: 360,
       codeFont: '', // 预览代码块（行内代码 + 围栏代码块）字体，存自定义字体 id，空=跟随等宽默认
+      autoFrontMatter: false,
+      hideFrontMatter: false,
+      frontMatterFields: {
+        title: true,
+        description: true,
+        date: true,
+        published: false,
+        pubDate: false,
+        draft: true,
+        tags: false,
+        category: false,
+        pinned: false,
+        author: false,
+        image: false,
+      },
     };
   }
 
@@ -1865,6 +1911,8 @@ class MarkdownEditor {
     document.getElementById('set-soft-breaks').checked = s.softBreaks !== false;
     document.getElementById('set-extended-syntax').checked = s.extendedSyntax !== false;
     document.getElementById('set-show-tray-icon').checked = s.showTrayIcon !== false;
+    document.getElementById('set-auto-frontmatter').checked = s.autoFrontMatter === true;
+    document.getElementById('set-hide-frontmatter').checked = s.hideFrontMatter === true;
     if (this._selects && this._selects.closeAction) this._selects.closeAction.setValue(s.closeAction || 'ask', true);
     document.getElementById('settings-image-asset-path').value = s.imageAssetPath || 'assets';
     const pathModeRadio = document.querySelector(`#settings-image-asset-path-mode input[value="${s.imageAssetPathMode || 'relative'}"]`);
@@ -1988,6 +2036,12 @@ class MarkdownEditor {
     });
     document.getElementById('set-show-tray-icon').addEventListener('change', (e) => {
       this.settings.showTrayIcon = e.target.checked;
+    });
+    document.getElementById('set-auto-frontmatter').addEventListener('change', (e) => {
+      this.settings.autoFrontMatter = e.target.checked;
+    });
+    document.getElementById('set-hide-frontmatter').addEventListener('change', (e) => {
+      this.settings.hideFrontMatter = e.target.checked;
     });
     document.getElementById('set-code-line-numbers').addEventListener('change', (e) => {
       this.settings.codeLineNumbers = e.target.checked;
@@ -6980,6 +7034,19 @@ class MarkdownEditor {
       if (e.key === 'Enter') document.getElementById('insert-link-ok').click();
     });
 
+    // Front Matter dialog
+    document.getElementById('frontmatter-ok').addEventListener('click', () => {
+      const fm = this._collectFrontMatterFromDialog();
+      if (fm) this.insertBlock(fm, 4);
+      this.hideFrontMatterDialog();
+      this.cm.focus();
+    });
+    document.getElementById('frontmatter-cancel').addEventListener('click', () => this.hideFrontMatterDialog());
+    document.getElementById('frontmatter-close').addEventListener('click', () => this.hideFrontMatterDialog());
+    document.getElementById('frontmatter-dialog').addEventListener('click', (e) => {
+      if (e.target.id === 'frontmatter-dialog') this.hideFrontMatterDialog();
+    });
+
     // Insert Image dialog
     const sourceHost = document.getElementById('insert-image-source');
     if (sourceHost) {
@@ -7064,6 +7131,141 @@ class MarkdownEditor {
 
   hideInsertLinkDialog() {
     document.getElementById('insert-link-dialog').classList.add('hidden');
+  }
+
+  // ====== Front Matter 弹窗 ======
+  _buildFrontMatterFields() {
+    const container = document.getElementById('frontmatter-fields-container');
+    if (!container) return;
+    container.innerHTML = '';
+    const fields = this.settings.frontMatterFields || {};
+    const t = this.t.bind(this);
+    const fieldDefs = [
+      { key: 'title', label: t('frontmatterTitle'), auto: () => this.activeTab ? this.activeTab.name.replace(/\.md$/i, '') : '' },
+      { key: 'description', label: t('frontmatterDescription'), auto: () => '' },
+      { key: 'date', label: t('frontmatterDate'), auto: () => this._formatDate(new Date()) },
+      { key: 'published', label: t('frontmatterPublished'), auto: () => this._formatDateTime(new Date()) },
+      { key: 'pubDate', label: t('frontmatterPubDate'), auto: () => this._formatDateTime(new Date()) },
+      { key: 'draft', label: t('frontmatterDraft'), auto: () => 'false' },
+      { key: 'tags', label: t('frontmatterTags'), auto: () => '[]' },
+      { key: 'category', label: t('frontmatterCategory'), auto: () => '' },
+      { key: 'pinned', label: t('frontmatterPinned'), auto: () => 'false' },
+      { key: 'author', label: t('frontmatterAuthor'), auto: () => '' },
+      { key: 'image', label: t('frontmatterImage'), auto: () => '' },
+    ];
+    for (const def of fieldDefs) {
+      const row = document.createElement('div');
+      row.className = 'frontmatter-field-row';
+      const checked = fields[def.key] ? 'checked' : '';
+      const autoVal = def.auto();
+      row.innerHTML =
+        '<label class="toggle"><input type="checkbox" class="fm-checkbox" data-field="' + def.key + '" ' + checked + '><span class="toggle-slider"></span></label>' +
+        '<label class="fm-field-label">' + def.label + '</label>' +
+        '<input type="text" class="fm-field-input" data-field="' + def.key + '" value="" placeholder="' + autoVal.replace(/"/g, '&quot;') + '">';
+      container.appendChild(row);
+    }
+  }
+
+  _formatDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  _formatDateTime(d) {
+    const date = this._formatDate(d);
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    const offset = -d.getTimezoneOffset();
+    const sign = offset >= 0 ? '+' : '-';
+    const oh = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
+    const om = String(Math.abs(offset) % 60).padStart(2, '0');
+    return date + 'T' + h + ':' + min + ':' + s + sign + oh + ':' + om;
+  }
+
+  showFrontMatterDialog() {
+    this._buildFrontMatterFields();
+    document.getElementById('frontmatter-dialog').classList.remove('hidden');
+  }
+
+  hideFrontMatterDialog() {
+    document.getElementById('frontmatter-dialog').classList.add('hidden');
+  }
+
+  _collectFrontMatterFromDialog() {
+    const container = document.getElementById('frontmatter-fields-container');
+    if (!container) return '';
+    const rows = container.querySelectorAll('.frontmatter-field-row');
+    const lines = [];
+    for (const row of rows) {
+      const cb = row.querySelector('.fm-checkbox');
+      const input = row.querySelector('.fm-field-input');
+      if (!cb || !input) continue;
+      if (!cb.checked) continue;
+      const field = cb.dataset.field;
+      let val = input.value.trim();
+      if (!val) val = input.placeholder;
+      if (!val) continue;
+      if (field === 'tags') {
+        lines.push(field + ': ' + val);
+      } else if (field === 'draft' || field === 'pinned') {
+        lines.push(field + ': ' + val);
+      } else if (field === 'date' || field === 'published' || field === 'pubDate') {
+        lines.push(field + ': "' + val + '"');
+      } else {
+        lines.push(field + ': "' + val.replace(/"/g, '\\"') + '"');
+      }
+    }
+    if (lines.length === 0) return '';
+    return '---\n' + lines.join('\n') + '\n---\n';
+  }
+
+  _generateAutoFrontMatter() {
+    const fields = this.settings.frontMatterFields || {};
+    const tab = this.activeTab;
+    const now = new Date();
+    const lines = [];
+    for (const [field, enabled] of Object.entries(fields)) {
+      if (!enabled) continue;
+      let val = '';
+      switch (field) {
+        case 'title': val = tab ? tab.name.replace(/\.md$/i, '') : ''; break;
+        case 'description': val = ''; break;
+        case 'date': val = this._formatDate(tab ? tab.createdAt : now); break;
+        case 'published': val = this._formatDateTime(now); break;
+        case 'pubDate': val = this._formatDateTime(now); break;
+        case 'draft': val = 'false'; break;
+        case 'tags': val = '[]'; break;
+        case 'category': val = ''; break;
+        case 'pinned': val = 'false'; break;
+        case 'author': val = ''; break;
+        case 'image': val = ''; break;
+      }
+      if (field === 'tags' || field === 'draft' || field === 'pinned') {
+        lines.push(field + ': ' + val);
+      } else if (field === 'date' || field === 'published' || field === 'pubDate') {
+        lines.push(field + ': "' + val + '"');
+      } else {
+        lines.push(field + ': "' + val.replace(/"/g, '\\"') + '"');
+      }
+    }
+    if (lines.length === 0) return '';
+    return '---\n' + lines.join('\n') + '\n---\n';
+  }
+
+  _updateFrontMatterDateFields(content) {
+    const now = this._formatDateTime(new Date());
+    const fields = this.settings.frontMatterFields || {};
+    let result = content;
+    if (fields.published) {
+      result = result.replace(/^(published:\s*)"[^"]*"/m, '$1"' + now + '"');
+    }
+    if (fields.pubDate) {
+      result = result.replace(/^(pubDate:\s*)"[^"]*"/m, '$1"' + now + '"');
+    }
+    return result;
   }
 
   showInsertImageDialog() {
@@ -8083,12 +8285,22 @@ class MarkdownEditor {
         if (!path) return;
       }
 
-      await TauriApi.writeFile({ path, content: this.activeTab.content });
+      let content = this.activeTab.content;
+      if (this.settings.autoFrontMatter) {
+        if (!content.startsWith('---')) {
+          content = this._generateAutoFrontMatter() + content;
+        } else {
+          content = this._updateFrontMatterDateFields(content);
+        }
+      }
+      await TauriApi.writeFile({ path, content });
       if (!this.activeTab.filePath) {
         this.activeTab.filePath = path;
         this.activeTab.name = path.split(/[/\\]/).pop();
       }
-      this.activeTab.savedContent = this.activeTab.content;
+      this.activeTab.content = content;
+      this.activeTab.savedContent = content;
+      this.cm.setValue(content);
       this.updateTabDisplay();
       await this.refreshFileMeta(this.activeTab);
       this.setStatus(`${this.t('saved')}: ${this.activeTab.filePath}`);
@@ -8109,10 +8321,20 @@ class MarkdownEditor {
       });
       if (!path) return;
 
-      await TauriApi.writeFile({ path, content: this.activeTab.content });
+      let content = this.activeTab.content;
+      if (this.settings.autoFrontMatter) {
+        if (!content.startsWith('---')) {
+          content = this._generateAutoFrontMatter() + content;
+        } else {
+          content = this._updateFrontMatterDateFields(content);
+        }
+      }
+      await TauriApi.writeFile({ path, content });
       this.activeTab.filePath = path;
       this.activeTab.name = path.split(/[/\\]/).pop();
-      this.activeTab.savedContent = this.activeTab.content;
+      this.activeTab.content = content;
+      this.activeTab.savedContent = content;
+      this.cm.setValue(content);
       this.updateTabBar();
       await this.refreshFileMeta(this.activeTab);
       this.setStatus(`${this.t('savedAs')}: ${path}`);
@@ -11979,6 +12201,8 @@ input[type="checkbox"]:checked::after { display: none !important; }
       case 'insert-callout-warning': this.insertBlock('> [!WARNING]\n> 警告内容', 15); break;
       case 'insert-callout-caution': this.insertBlock('> [!CAUTION]\n> 注意内容', 15); break;
       case 'insert-callout-important': this.insertBlock('> [!IMPORTANT]\n> 重要内容', 17); break;
+
+      case 'insert-frontmatter': this.showFrontMatterDialog(); break;
 
       case 'insert-ul': this.insertLinePrefix('- '); break;
       case 'insert-ol': this.insertLinePrefix('1. ', true); break;

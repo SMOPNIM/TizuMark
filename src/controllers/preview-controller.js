@@ -104,7 +104,7 @@
         if (typeof UnifiedRenderer === 'undefined' || !UnifiedRenderer || typeof UnifiedRenderer.renderMarkdown !== 'function') {
           throw new Error('渲染器未构建或加载失败（src/lib/unified-bundle.js），请运行 npm run build:renderer');
         }
-        const html = UnifiedRenderer.renderMarkdown(renderContent, { softBreaks: this.app.settings.softBreaks, tabSize: this.app.settings.tabSize, extendedSyntax: this.app.settings.extendedSyntax });
+        const html = UnifiedRenderer.renderMarkdown(renderContent, { softBreaks: this.app.settings.softBreaks, tabSize: this.app.settings.tabSize, extendedSyntax: this.app.settings.extendedSyntax, hideFrontMatter: this.app.settings.hideFrontMatter });
         if (gen !== this.app._renderGeneration) return;
 
         let finalHtml = html;
