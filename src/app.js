@@ -1138,6 +1138,7 @@ class MarkdownEditor {
     this.loadTheme();
     this.applySplitterRatio();
     this.updatePreview();
+    this.viewMode = this.settings.defaultView || 'preview';
     this.applyViewMode();
     this.updateMaximizeIcon();
     this.updateWordCount();
@@ -2973,6 +2974,7 @@ class MarkdownEditor {
     if (this._hljsCache) this._hljsCache.clear();
     await this.applyThemeMode();
     this.applyCustomFonts();
+    this.setViewMode(this.settings.defaultView || 'preview');
   }
 
   // ====== 自定义字体 ======
