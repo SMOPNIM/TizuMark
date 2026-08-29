@@ -530,6 +530,86 @@ function restoreAlerts(html, alertBlocks) {
   return result;
 }
 
+// Convert :::TYPE containers (VuePress/VitePress-style admonitions) to placeholders
+const CONTAINER_TYPES = ['note', 'tip', 'important', 'warning', 'caution'];
+const containerTypeSet = new Set(CONTAINER_TYPES);
+
+function getContainerType(line) {
+  const m = line.match(/^:::(\w+)/);
+  if (m && containerTypeSet.has(m[1].toLowerCase())) return m[1].toLowerCase();
+  return null;
+}
+
+function convertContainers(content) {
+  const lines = content.split('\n');
+  const result = [];
+  const containerBlocks = [];
+  let i = 0;
+  let inCodeBlock = false;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim().startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      result.push(line);
+      i++;
+      continue;
+    }
+    if (inCodeBlock) {
+      result.push(line);
+      i++;
+      continue;
+    }
+    const containerType = getContainerType(line);
+    if (containerType && line.trim().startsWith(':::')) {
+      // 解析可选自定义标题：:::note[标题文本]
+      let customTitle = null;
+      const titleMatch = line.match(/^:::\w+\[(.+?)\]\s*$/);
+      if (titleMatch) {
+        customTitle = titleMatch[1].trim();
+      }
+      const contentLines = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith(':::')) {
+        contentLines.push(lines[i]);
+        i++;
+      }
+      // 跳过结束标记 :::
+      if (i < lines.length) i++;
+      const idx = containerBlocks.length;
+      containerBlocks.push({ type: containerType, title: customTitle, content: contentLines.join('\n') });
+      if (contentLines.length > 0) {
+        contentLines[contentLines.length - 1] += '<!--CONTAINERBLOCK_' + idx + '_END-->';
+      }
+      result.push('<!--CONTAINERBLOCK_' + idx + '-->');
+      result.push(contentLines.join('\n'));
+    } else {
+      result.push(line);
+      i++;
+    }
+  }
+  return { content: result.join('\n'), containerBlocks };
+}
+
+function restoreContainers(html, containerBlocks) {
+  if (containerBlocks.length === 0) return html;
+  let result = html;
+  for (let idx = containerBlocks.length - 1; idx >= 0; idx--) {
+    const block = containerBlocks[idx];
+    const startMarker = '<!--CONTAINERBLOCK_' + idx + '-->';
+    const endMarker = '<!--CONTAINERBLOCK_' + idx + '_END-->';
+    const startPos = result.indexOf(startMarker);
+    const endPos = result.indexOf(endMarker);
+    if (startPos !== -1 && endPos !== -1) {
+      const before = result.substring(0, startPos);
+      const inner = result.substring(startPos + startMarker.length, endPos);
+      const after = result.substring(endPos + endMarker.length);
+      const titleHTML = getAlertTitleHTML(block.type, block.title);
+      result = before + '<div class="alert alert-' + block.type + '">' + titleHTML + '<div class="alert-content">' + inner + '</div></div>' + after;
+    }
+  }
+  return result;
+}
+
 // Convert definition lists
 // 为 <dl>/<dt>/<dd> 添加 data-source-line，确保滚动同步能映射到这些元素
 function convertDefLists(content) {
@@ -1476,8 +1556,12 @@ function renderMarkdown(content, options) {
   const alertResult = convertAlerts(mathResult.content);
   const alertBlocks = alertResult.alertBlocks;
 
+  // 3.5. Convert :::TYPE containers to placeholders
+  const containerResult = convertContainers(alertResult.content);
+  const containerBlocks = containerResult.containerBlocks;
+
   // 4. Convert definition lists
-  let processed = convertDefLists(alertResult.content);
+  let processed = convertDefLists(containerResult.content);
 
   // 4.5. Convert container-embedded tables (lazy continuation)
   processed = convertContainerTables(processed);
@@ -1527,6 +1611,9 @@ function renderMarkdown(content, options) {
 
   // 8. Restore alert blocks
   html = restoreAlerts(html, alertBlocks);
+
+  // 8.5. Restore container blocks
+  html = restoreContainers(html, containerBlocks);
 
   // 9. Sanitize
   html = sanitizeHTML(html);
