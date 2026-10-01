@@ -1535,10 +1535,14 @@ function renderMarkdown(content, options) {
   content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
   // 0.1. 隐藏 Front Matter（若设置开启）
-  if (opts.hideFrontMatter && content.startsWith('---')) {
-    const endIdx = content.indexOf('\n---', 3);
-    if (endIdx !== -1) {
-      content = content.substring(endIdx + 4).replace(/^\n/, '');
+  if (opts.hideFrontMatter) {
+    const trimmed = content.replace(/^\uFEFF/, '').trimStart();
+    if (trimmed.startsWith('---')) {
+      const fullTrimmed = content.replace(/^\uFEFF/, '');
+      const fmMatch = fullTrimmed.match(/^---\s*\n[\s\S]*?\n---/);
+      if (fmMatch) {
+        content = fullTrimmed.substring(fmMatch[0].length).replace(/^\n/, '');
+      }
     }
   }
 

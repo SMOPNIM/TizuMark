@@ -7259,13 +7259,32 @@ class MarkdownEditor {
     const now = this._formatDateTime(new Date());
     const fields = this.settings.frontMatterFields || {};
     let result = content;
-    if (fields.published) {
-      result = result.replace(/^(published:\s*)"[^"]*"/m, '$1"' + now + '"');
+    // 找到 front matter 区块（首个 --- 和第二个 --- 之间）
+    const fmMatch = result.match(/^---\s*\n([\s\S]*?)\n---/);
+    if (!fmMatch) return result;
+    const fmBody = fmMatch[1];
+    const lines = fmBody.split('\n');
+    let updated = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (fields.published && /^published\s*[:=]/.test(line)) {
+        lines[i] = 'published: "' + now + '"';
+        updated = true;
+      }
+      if (fields.pubDate && /^(pubDate|pub_date)\s*[:=]/.test(line)) {
+        lines[i] = 'pubDate: "' + now + '"';
+        updated = true;
+      }
     }
-    if (fields.pubDate) {
-      result = result.replace(/^(pubDate:\s*)"[^"]*"/m, '$1"' + now + '"');
+    if (updated) {
+      result = result.replace(fmMatch[0], '---\n' + lines.join('\n') + '\n---');
     }
     return result;
+  }
+
+  _hasFrontMatter(content) {
+    const trimmed = content.replace(/^\uFEFF/, '').trimStart();
+    return trimmed.startsWith('---');
   }
 
   showInsertImageDialog() {
@@ -8287,7 +8306,7 @@ class MarkdownEditor {
 
       let content = this.activeTab.content;
       if (this.settings.autoFrontMatter) {
-        if (!content.startsWith('---')) {
+        if (!this._hasFrontMatter(content)) {
           content = this._generateAutoFrontMatter() + content;
         } else {
           content = this._updateFrontMatterDateFields(content);
@@ -8323,7 +8342,7 @@ class MarkdownEditor {
 
       let content = this.activeTab.content;
       if (this.settings.autoFrontMatter) {
-        if (!content.startsWith('---')) {
+        if (!this._hasFrontMatter(content)) {
           content = this._generateAutoFrontMatter() + content;
         } else {
           content = this._updateFrontMatterDateFields(content);
